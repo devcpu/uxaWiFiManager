@@ -1,14 +1,14 @@
 /*
  * File: uxaWiFiManager.h
  * Project: uxaWiFiManager
- * Description: My custom WiFi Manager 
+ * Description: My custom WiFi Manager
  * Runs both AP and STA Mode
  * AP for environments without router
  * -----
  * Created Date: 2023-08-28 18:44
  * Author: Johannes G.  Arlt (janusz)
  * -----
- * Last Modified: 2023-08-28 19:32
+ * Last Modified: 2023-08-28 19:52
  * Modified By: Johannes G.  Arlt (janusz)
  * -----
  * Copyright (c) 2023 STRATO AG Berlin, Germany
@@ -19,48 +19,81 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+
 #include "esp_wps.h"
 #define ESP_WPS_MODE WPS_TYPE_PBC
-#include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
+#include <ESPAsyncWebServer.h>
+
 #include <memory>
-typedef int16_t wifi_ssid_count_t; //TODO - ersetzten, wenn lib läuft
-#include <rom/rtc.h> //TODO - wahrchienlich nur für die ESP32 - Daten also removen
+typedef int16_t wifi_ssid_count_t;  // TODO - ersetzten, wenn lib läuft
+#include <rom/rtc.h>  //TODO - wahrchienlich nur für die ESP32 - Daten also removen
 
+#define WIFI_MANAGER_MAX_PARAMS 10
 
-WIFI_MANAGER_MAX_PARAMS = 10
-
-//TODO - move to spiffs
-const char WFM_HTTP_HEAD[] PROGMEM = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/><title>{v}</title>";
-const char HTTP_STYLE[] PROGMEM = "<style>.c{text-align: center;} div,input{padding:5px;font-size:1em;} input{width:95%;} body{text-align: center;font-family:verdana;} button{border:0;border-radius:0.3rem;background-color:#1fa3ec;color:#fff;line-height:2.4rem;font-size:1.2rem;width:100%;} .q{float: right;width: 64px;text-align: right;} .l{background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==\") no-repeat left center;background-size: 1em;}</style>";
-const char HTTP_SCRIPT[] PROGMEM = "<script>function c(l){document.getElementById('s').value=l.innerText||l.textContent;document.getElementById('p').focus();}</script>";
-const char HTTP_HEAD_END[] PROGMEM = "</head><body><div style='text-align:left;display:inline-block;min-width:260px;'>";
-const char HTTP_PORTAL_OPTIONS[] PROGMEM = "<form action=\"/wifi\" method=\"get\"><button>Configure WiFi</button></form><br/><form action=\"/0wifi\" method=\"get\"><button>Configure WiFi (No Scan)</button></form><br/><form action=\"/i\" method=\"get\"><button>Info</button></form><br/><form action=\"/r\" method=\"post\"><button>Reset</button></form>";
-const char HTTP_ITEM[] PROGMEM = "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q {i}'>{r}%</span></div>";
-const char HTTP_FORM_START[] PROGMEM = "<form method='get' action='wifisave'><input id='s' name='s' length=32 placeholder='SSID'><br/><input id='p' name='p' length=64 type='password' placeholder='password'><br/>";
-const char HTTP_FORM_PARAM[] PROGMEM = "<br/><input id='{i}' name='{n}' length={l} placeholder='{p}' value='{v}' {c}>";
-const char HTTP_FORM_END[] PROGMEM = "<br/><button type='submit'>save</button></form>";
-const char HTTP_SCAN_LINK[] PROGMEM = "<br/><div class=\"c\"><a href=\"/wifi\">Scan</a></div>";
-const char HTTP_SAVED[] PROGMEM = "<div>Credentials Saved<br />Trying to connect ESP to network.<br />If it fails reconnect to AP to try again</div>";
+// TODO - move to spiffs
+const char WFM_HTTP_HEAD[] PROGMEM =
+    "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" "
+    "content=\"width=device-width, initial-scale=1, "
+    "user-scalable=no\"/><title>{v}</title>";
+const char HTTP_STYLE[] PROGMEM =
+    "<style>.c{text-align: center;} div,input{padding:5px;font-size:1em;} "
+    "input{width:95%;} body{text-align: center;font-family:verdana;} "
+    "button{border:0;border-radius:0.3rem;background-color:#1fa3ec;color:#fff;"
+    "line-height:2.4rem;font-size:1.2rem;width:100%;} .q{float: right;width: "
+    "64px;text-align: right;} .l{background: "
+    "url(\"data:image/"
+    "png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///"
+    "8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4"
+    "je2NSw7AIAhEBamKn97/"
+    "uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcq"
+    "xSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==\") "
+    "no-repeat left center;background-size: 1em;}</style>";
+const char HTTP_SCRIPT[] PROGMEM =
+    "<script>function "
+    "c(l){document.getElementById('s').value=l.innerText||l.textContent;"
+    "document.getElementById('p').focus();}</script>";
+const char HTTP_HEAD_END[] PROGMEM =
+    "</head><body><div "
+    "style='text-align:left;display:inline-block;min-width:260px;'>";
+const char HTTP_PORTAL_OPTIONS[] PROGMEM =
+    "<form action=\"/wifi\" method=\"get\"><button>Configure "
+    "WiFi</button></form><br/><form action=\"/0wifi\" "
+    "method=\"get\"><button>Configure WiFi (No Scan)</button></form><br/><form "
+    "action=\"/i\" method=\"get\"><button>Info</button></form><br/><form "
+    "action=\"/r\" method=\"post\"><button>Reset</button></form>";
+const char HTTP_ITEM[] PROGMEM =
+    "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q "
+    "{i}'>{r}%</span></div>";
+const char HTTP_FORM_START[] PROGMEM =
+    "<form method='get' action='wifisave'><input id='s' name='s' length=32 "
+    "placeholder='SSID'><br/><input id='p' name='p' length=64 type='password' "
+    "placeholder='password'><br/>";
+const char HTTP_FORM_PARAM[] PROGMEM =
+    "<br/><input id='{i}' name='{n}' length={l} placeholder='{p}' value='{v}' "
+    "{c}>";
+const char HTTP_FORM_END[] PROGMEM =
+    "<br/><button type='submit'>save</button></form>";
+const char HTTP_SCAN_LINK[] PROGMEM =
+    "<br/><div class=\"c\"><a href=\"/wifi\">Scan</a></div>";
+const char HTTP_SAVED[] PROGMEM =
+    "<div>Credentials Saved<br />Trying to connect ESP to network.<br />If it "
+    "fails reconnect to AP to try again</div>";
 const char HTTP_END[] PROGMEM = "</div></body></html>";
 
-  //const int     WM_DONE                 = 0;
-  //const int     WM_WAIT                 = 10;
-  //const String  HTTP_HEAD = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><title>{v}</title>";
+// const int     WM_DONE                 = 0;
+// const int     WM_WAIT                 = 10;
+// const String  HTTP_HEAD = "<!DOCTYPE html><html lang=\"en\"><head><meta
+// name=\"viewport\" content=\"width=device-width,
+// initial-scale=1\"/><title>{v}</title>";
 
-
-class AsyncWiFiManagerParameter
-{
-public:
+class AsyncWiFiManagerParameter {
+ public:
   AsyncWiFiManagerParameter(const char *custom);
-  AsyncWiFiManagerParameter(const char *id,
-                            const char *placeholder,
-                            const char *defaultValue,
-                            unsigned int length);
-  AsyncWiFiManagerParameter(const char *id,
-                            const char *placeholder,
-                            const char *defaultValue,
-                            unsigned int length,
+  AsyncWiFiManagerParameter(const char *id, const char *placeholder,
+                            const char *defaultValue, unsigned int length);
+  AsyncWiFiManagerParameter(const char *id, const char *placeholder,
+                            const char *defaultValue, unsigned int length,
                             const char *custom);
 
   const char *getID();
@@ -69,26 +102,21 @@ public:
   unsigned int getValueLength();
   const char *getCustomHTML();
 
-private:
+ private:
   const char *_id;
   const char *_placeholder;
   char *_value;
   unsigned int _length;
   const char *_customHTML;
 
-  void init(const char *id,
-            const char *placeholder,
-            const char *defaultValue,
-            unsigned int length,
-            const char *custom);
+  void init(const char *id, const char *placeholder, const char *defaultValue,
+            unsigned int length, const char *custom);
 
   friend class AsyncWiFiManager;
 };
 
-
-class WiFiResult
-{
-public:
+class WiFiResult {
+ public:
   bool duplicate;
   String SSID;
   uint8_t encryptionType;
@@ -97,14 +125,11 @@ public:
   int32_t channel;
   bool isHidden;
 
-  WiFiResult()
-  {
-  }
+  WiFiResult() {}
 };
 
-class AsyncWiFiManager
-{
-public:
+class AsyncWiFiManager {
+ public:
   AsyncWiFiManager(AsyncWebServer *server, DNSServer *dns);
 
   void scan(boolean async = false);
@@ -114,12 +139,12 @@ public:
   void criticalLoop();
   String infoAsString();
 
-  boolean autoConnect(char const *apName,
-                      char const *apPassword = NULL,
+  boolean autoConnect(char const *apName, char const *apPassword = NULL,
                       unsigned long maxConnectRetries = 1,
                       unsigned long retryDelayMs = 1000);
 
-  // if you want to always start the config portal, without trying to connect first
+  // if you want to always start the config portal, without trying to connect
+  // first
   boolean startConfigPortal(char const *apName, char const *apPassword = NULL);
   void startConfigPortalModeless(char const *apName, char const *apPassword);
 
@@ -128,17 +153,20 @@ public:
 
   void resetSettings();
 
-  // sets timeout before webserver loop ends and exits even if there has been no setup.
-  // usefully for devices that failed to connect at some point and got stuck in a webserver loop.
-  // in seconds, setConfigPortalTimeout is a new name for setTimeout
+  // sets timeout before webserver loop ends and exits even if there has been no
+  // setup. usefully for devices that failed to connect at some point and got
+  // stuck in a webserver loop. in seconds, setConfigPortalTimeout is a new name
+  // for setTimeout
   void setConfigPortalTimeout(unsigned long seconds);
   void setTimeout(unsigned long seconds);
 
-  // sets timeout for which to attempt connecting, usefull if you get a lot of failed connects
+  // sets timeout for which to attempt connecting, usefull if you get a lot of
+  // failed connects
   void setConnectTimeout(unsigned long seconds);
 
-  // wether or not the wifi manager tries to connect to configured access point even when
-  // configuration portal (ESP as access point) is running [default true/on]
+  // wether or not the wifi manager tries to connect to configured access point
+  // even when configuration portal (ESP as access point) is running [default
+  // true/on]
   void setTryConnectDuringConfigPortal(boolean v);
 
   void setDebugOutput(boolean debug);
@@ -147,20 +175,20 @@ public:
   // sets a custom ip /gateway /subnet configuration
   void setAPStaticIPConfig(IPAddress ip, IPAddress gw, IPAddress sn);
   // sets config for a static IP
-  void setSTAStaticIPConfig(IPAddress ip,
-                            IPAddress gw,
-                            IPAddress sn,
+  void setSTAStaticIPConfig(IPAddress ip, IPAddress gw, IPAddress sn,
                             IPAddress dns1 = (uint32_t)0x00000000,
                             IPAddress dns2 = (uint32_t)0x00000000);
   // called when AP mode and config portal is started
   void setAPCallback(std::function<void(AsyncWiFiManager *)>);
   // called when settings have been changed and connection was successful
   void setSaveConfigCallback(std::function<void()> func);
-  //adds a custom parameter
+  // adds a custom parameter
   void addParameter(AsyncWiFiManagerParameter *p);
-  // if this is set, it will exit after config, even if connection is unsucessful
+  // if this is set, it will exit after config, even if connection is
+  // unsucessful
   void setBreakAfterConfig(boolean shouldBreak);
-  // if this is set, try WPS setup when starting (this will delay config portal for up to 2 mins)
+  // if this is set, try WPS setup when starting (this will delay config portal
+  // for up to 2 mins)
   // TODO
   // if this is set, customise style
   void setCustomHeadElement(const char *element);
@@ -169,14 +197,10 @@ public:
   // sets a custom element to add to options page
   void setCustomOptionsElement(const char *element);
 
-  String getConfiguredSTASSID(){
-      return _ssid;
-  }
-  String getConfiguredSTAPassword(){
-      return _pass;
-  }
+  String getConfiguredSTASSID() { return _ssid; }
+  String getConfiguredSTAPassword() { return _pass; }
 
-private:
+ private:
   AsyncWebServer *server;
   DNSServer *dnsServer;
 
@@ -215,8 +239,8 @@ private:
   const char *_customHeadElement = "";
   const char *_customOptionsElement = "";
 
-  //String        getEEPROMString(int start, int len);
-  //void          setEEPROMString(int start, int len, String string);
+  // String        getEEPROMString(int start, int len);
+  // void          setEEPROMString(int start, int len, String string);
 
   uint8_t status = WL_IDLE_STATUS;
   uint8_t connectWifi(String ssid, String pass);
@@ -259,17 +283,16 @@ private:
   void DEBUG_WM(Generic text);
 
   template <class T>
-  auto optionalIPFromString(T *obj, const char *s) -> decltype(obj->fromString(s))
-  {
+  auto optionalIPFromString(T *obj, const char *s)
+      -> decltype(obj->fromString(s)) {
     return obj->fromString(s);
   }
-  auto optionalIPFromString(...) -> bool
-  {
-    DEBUG_WM(F("NO fromString METHOD ON IPAddress, you need ESP8266 core 2.1.0 or newer for Custom IP configuration to work."));
+  auto optionalIPFromString(...) -> bool {
+    DEBUG_WM(
+        F("NO fromString METHOD ON IPAddress, you need ESP8266 core 2.1.0 or "
+          "newer for Custom IP configuration to work."));
     return false;
   }
 };
 
-
-
-#endif// SRC_UXAWIFIMANAGER_H_
+#endif  // SRC_UXAWIFIMANAGER_H_
